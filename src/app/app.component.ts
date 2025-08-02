@@ -7,5 +7,12 @@ import { Component } from '@angular/core';
   standalone: false,
 })
 export class AppComponent {
-  constructor() {}
+  constructor() {
+    this.initializeApp();
+  }
+
+  initializeApp() {
+    // Set RTL direction
+    document.documentElement.dir = 'rtl';
+  }
 }

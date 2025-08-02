@@ -1,0 +1,73 @@
+.transcript-container {
+  background: var(--ion-color-light);
+  padding: 16px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  min-height: 100px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.word-matches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  direction: rtl; // For Arabic text
+  
+  span {
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 1.1em;
+    transition: all 0.3s ease;
+    
+    &.correct {
+      background-color: var(--ion-color-success-tint);
+      color: var(--ion-color-success-contrast);
+    }
+    
+    &.incorrect {
+      background-color: var(--ion-color-danger-tint);
+      color: var(--ion-color-danger-contrast);
+    }
+    
+    &.partial {
+      background-color: var(--ion-color-warning-tint);
+      color: var(--ion-color-warning-contrast);
+      animation: pulse 1s infinite;
+    }
+  }
+}
+
+.placeholder {
+  color: var(--ion-color-medium);
+  text-align: center;
+  margin: 0;
+}
+
+.accuracy-container {
+  margin-top: 16px;
+  
+  .accuracy-text {
+    text-align: center;
+    margin: 8px 0 0;
+    color: var(--ion-color-medium);
+  }
+}
+
+.button-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+@keyframes pulse {
+  0% { opacity: 1; }
+  50% { opacity: 0.6; }
+  100% { opacity: 1; }
+}
+
+ion-card {
+  margin: 16px 0;
+} 

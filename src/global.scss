@@ -25,6 +25,43 @@
 @import "@ionic/angular/css/text-transformation.css";
 @import "@ionic/angular/css/flex-utils.css";
 
+/* Custom RTL Styles */
+:root {
+  --ion-font-family: "Arial", sans-serif;
+}
+
+/* Set default text direction for the app */
+:root {
+  direction: rtl;
+}
+
+ion-app {
+  direction: rtl;
+  text-align: right;
+}
+
+/* Fix RTL specific layouts */
+ion-header, ion-content, ion-footer {
+  direction: rtl;
+}
+
+ion-item {
+  direction: rtl;
+  text-align: right;
+}
+
+/* Fix icon directions in RTL */
+ion-icon {
+  &[dir="rtl"] {
+    transform: scaleX(-1);
+  }
+}
+
+/* Fix back button arrow direction */
+ion-back-button {
+  transform: scaleX(-1);
+}
+
 /**
  * Ionic Dark Mode
  * -----------------------------------------------------

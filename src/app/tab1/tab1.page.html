@@ -1,17 +1,46 @@
 <ion-header [translucent]="true">
   <ion-toolbar>
     <ion-title>
-      Tab 1
+      Memorization List
     </ion-title>
+    <ion-buttons slot="end">
+      <ion-button (click)="addNewItem()">
+        <ion-icon name="add"></ion-icon>
+      </ion-button>
+    </ion-buttons>
   </ion-toolbar>
 </ion-header>
 
 <ion-content [fullscreen]="true">
   <ion-header collapse="condense">
     <ion-toolbar>
-      <ion-title size="large">Tab 1</ion-title>
+      <ion-title size="large">Memorization List</ion-title>
     </ion-toolbar>
   </ion-header>
 
-  <app-explore-container name="Tab 1 page"></app-explore-container>
+  <ion-list>
+    <ion-item-sliding *ngFor="let item of items">
+      <ion-item [routerLink]="['/tabs/tab1/', item.id]">
+        <ion-label>
+          <h2>{{ item.title }}</h2>
+          <p>{{ item.content.substring(0, 100) }}{{ item.content.length > 100 ? '...' : '' }}</p>
+          <ion-note>Last practiced: {{ item.lastPracticed ? (item.lastPracticed | date:'short') : 'Never' }}</ion-note>
+        </ion-label>
+        <ion-badge slot="end" *ngIf="item.accuracy !== undefined && item.accuracy !== null">
+          {{ item.accuracy | number:'1.0-0' }}%
+        </ion-badge>
+      </ion-item>
+
+      <ion-item-options side="end">
+        <ion-item-option color="danger" (click)="deleteItem(item.id)">
+          <ion-icon slot="icon-only" name="trash"></ion-icon>
+        </ion-item-option>
+      </ion-item-options>
+    </ion-item-sliding>
+  </ion-list>
+
+  <ion-text color="medium" class="ion-text-center ion-padding" *ngIf="items.length === 0">
+    <h2>No items to memorize</h2>
+    <p>Click the + button to add your first item</p>
+  </ion-text>
 </ion-content>

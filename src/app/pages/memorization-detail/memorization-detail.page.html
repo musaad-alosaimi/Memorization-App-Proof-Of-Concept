@@ -1,0 +1,90 @@
+<ion-header>
+  <ion-toolbar>
+    <ion-buttons slot="start">
+      <ion-button defaultHref="/tabs/tab1">
+        <ion-icon name="arrow-back"></ion-icon>
+      </ion-button>
+    </ion-buttons>
+    <ion-title>{{ item?.title }}</ion-title>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content class="ion-padding">
+  <div *ngIf="item">
+    <ion-card>
+      <ion-card-header>
+        <ion-card-title>Content to Memorize</ion-card-title>
+      </ion-card-header>
+      <ion-card-content>
+        <p>{{ item.content }}</p>
+      </ion-card-content>
+    </ion-card>
+
+    <ion-card>
+      <ion-card-header>
+        <ion-card-title>Practice</ion-card-title>
+        <ion-card-subtitle>
+          Click the microphone button and start speaking
+        </ion-card-subtitle>
+      </ion-card-header>
+      
+      <ion-card-content>
+        <div class="transcript-container">
+          <div *ngIf="wordMatches.length > 0" class="word-matches">
+            <span *ngFor="let match of wordMatches" 
+                  [class.correct]="match.isCorrect"
+                  [class.incorrect]="!match.isCorrect"
+                  [class.partial]="match.isPartial">
+              {{ match.word }}
+            </span>
+          </div>
+          <p *ngIf="!wordMatches.length" class="placeholder">
+            Your speech will appear here...
+          </p>
+        </div>
+
+        <div class="accuracy-container" *ngIf="accuracy > 0">
+          <ion-progress-bar [value]="accuracy / 100" [color]="accuracy > 80 ? 'success' : 'warning'"></ion-progress-bar>
+          <p class="accuracy-text">Accuracy: {{ accuracy | number:'1.0-0' }}%</p>
+        </div>
+
+        <div class="button-container">
+          <ion-button expand="block" (click)="toggleListening()" [color]="isListening ? 'danger' : 'primary'">
+            <ion-icon slot="start" [name]="isListening ? 'mic' : 'mic-outline'"></ion-icon>
+            {{ isListening ? 'Stop' : 'Start' }} Practice
+          </ion-button>
+          
+          <ion-button expand="block" 
+                      fill="outline" 
+                      color="medium" 
+                      (click)="resetPractice()"
+                      *ngIf="wordMatches.length > 0">
+            <ion-icon slot="start" name="refresh-outline"></ion-icon>
+            Reset Practice
+          </ion-button>
+        </div>
+      </ion-card-content>
+    </ion-card>
+
+    <ion-card>
+      <ion-card-header>
+        <ion-card-title>Statistics</ion-card-title>
+      </ion-card-header>
+      <ion-card-content>
+        <ion-list>
+          <ion-item>
+            <ion-label>Last Practiced</ion-label>
+            <ion-note slot="end">{{ item.lastPracticed }}</ion-note>
+          </ion-item>
+          <ion-item>
+            <ion-label>Best Accuracy</ion-label>
+            <ion-badge slot="end" *ngIf="item.accuracy !== undefined">
+              {{ item.accuracy | number:'1.0-0' }}%
+            </ion-badge>
+            <ion-note slot="end" *ngIf="item.accuracy === undefined">Not practiced yet</ion-note>
+          </ion-item>
+        </ion-list>
+      </ion-card-content>
+    </ion-card>
+  </div>
+</ion-content> 

@@ -6,6 +6,10 @@ const routes: Routes = [
   {
     path: '',
     component: Tab1Page,
+  },
+  {
+    path: ':id',
+    loadComponent: () => import('../pages/memorization-detail/memorization-detail.page').then(m => m.MemorizationDetailPage)
   }
 ];
 
