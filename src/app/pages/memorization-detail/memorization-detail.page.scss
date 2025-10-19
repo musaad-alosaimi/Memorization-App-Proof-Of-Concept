@@ -9,6 +9,62 @@
   justify-content: center;
 }
 
+// Progressive word revelation display
+.revealed-words {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  direction: rtl; // For Arabic text
+  align-items: center;
+  justify-content: flex-start;
+  min-height: 60px;
+  
+  span {
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 1.2em;
+    font-weight: 500;
+    transition: all 0.4s ease;
+    
+    &.revealed {
+      background-color: var(--ion-color-success-tint);
+      color: var(--ion-color-success-shade);
+      border: 2px solid var(--ion-color-success);
+      opacity: 1;
+      transform: scale(1);
+      animation: revealWord 0.5s ease-out;
+    }
+    
+    &.hidden {
+      background-color: var(--ion-color-medium-tint);
+      color: var(--ion-color-medium);
+      border: 2px dashed var(--ion-color-medium);
+      opacity: 0.6;
+      font-size: 0.9em;
+      letter-spacing: 2px;
+    }
+    
+    &.correct {
+      box-shadow: 0 2px 8px rgba(var(--ion-color-success-rgb), 0.3);
+    }
+  }
+}
+
+@keyframes revealWord {
+  0% {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  50% {
+    transform: scale(1.1);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+// Keep old styles for backward compatibility if needed
 .word-matches {
   display: flex;
   flex-wrap: wrap;
@@ -70,4 +126,62 @@
 
 ion-card {
   margin: 16px 0;
+}
+
+// Debug information styles
+.debug-controls {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+  justify-content: center;
+}
+
+.debug-info {
+  h4 {
+    margin: 12px 0 8px 0;
+    color: var(--ion-color-primary);
+    font-size: 0.9em;
+    font-weight: 600;
+  }
+  
+  p {
+    margin: 0 0 8px 0;
+    padding: 8px;
+    background: var(--ion-color-light);
+    border-radius: 4px;
+    font-family: monospace;
+    font-size: 0.85em;
+    direction: rtl;
+    text-align: right;
+  }
+}
+
+.word-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  direction: rtl;
+  
+  span {
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.8em;
+    font-family: monospace;
+    
+    &.revealed {
+      background-color: var(--ion-color-success-tint);
+      color: var(--ion-color-success-shade);
+      border: 1px solid var(--ion-color-success);
+    }
+    
+    &.hidden {
+      background-color: var(--ion-color-medium-tint);
+      color: var(--ion-color-medium);
+      border: 1px dashed var(--ion-color-medium);
+    }
+    
+    &.correct {
+      box-shadow: 0 1px 4px rgba(var(--ion-color-success-rgb), 0.3);
+    }
+  }
 } 

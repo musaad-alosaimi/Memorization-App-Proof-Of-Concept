@@ -1,0 +1,310 @@
+:host {
+  display: block;
+  width: 100%;
+}
+
+ion-card {
+  margin: 16px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+// Metrics Section
+.metric-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 12px;
+  background: var(--ion-color-light);
+  border-radius: 8px;
+  text-align: center;
+}
+
+.metric-badge {
+  font-size: 24px;
+  font-weight: bold;
+  padding: 8px 16px;
+  min-width: 80px;
+  margin-bottom: 8px;
+}
+
+.metric-label {
+  font-size: 12px;
+  color: var(--ion-color-medium);
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+// Error Statistics
+.error-stats {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--ion-color-light);
+}
+
+.stat-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  
+  ion-icon {
+    font-size: 20px;
+  }
+  
+  .stat-value {
+    font-size: 18px;
+    font-weight: bold;
+    color: var(--ion-color-dark);
+  }
+  
+  .stat-label {
+    font-size: 10px;
+    color: var(--ion-color-medium);
+    text-transform: uppercase;
+  }
+}
+
+// Token Grid
+.alignment-content {
+  padding: 16px;
+}
+
+.token-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.token-item {
+  border: 2px solid;
+  border-radius: 8px;
+  padding: 8px;
+  transition: transform 0.2s, box-shadow 0.2s;
+  background: var(--ion-color-light);
+  
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+  }
+}
+
+// Token Operation Styles
+.token-match {
+  border-color: var(--ion-color-success);
+  background: var(--ion-color-success-tint);
+}
+
+.token-substitution {
+  border-color: var(--ion-color-warning);
+  background: var(--ion-color-warning-tint);
+}
+
+.token-deletion {
+  border-color: var(--ion-color-danger);
+  background: var(--ion-color-danger-tint);
+}
+
+.token-insertion {
+  border-color: var(--ion-color-tertiary);
+  background: var(--ion-color-tertiary-tint);
+}
+
+// Token Header
+.token-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+  
+  ion-icon {
+    font-size: 16px;
+  }
+  
+  .token-index {
+    font-size: 10px;
+    color: var(--ion-color-medium);
+    font-weight: 600;
+  }
+}
+
+// Token Content
+.token-content {
+  font-size: 14px;
+  font-family: monospace;
+  word-break: break-word;
+}
+
+.token-text {
+  color: var(--ion-color-success-shade);
+  font-weight: 500;
+}
+
+.token-sub {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: center;
+  
+  ion-icon {
+    font-size: 12px;
+    color: var(--ion-color-warning);
+  }
+  
+  .token-ref {
+    color: var(--ion-color-danger);
+    text-decoration: line-through;
+    font-size: 12px;
+  }
+  
+  .token-hyp {
+    color: var(--ion-color-success);
+    font-weight: 600;
+  }
+}
+
+.token-del {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  
+  .token-ref.deleted {
+    color: var(--ion-color-danger-shade);
+    text-decoration: line-through;
+  }
+  
+  .op-badge {
+    font-size: 10px;
+    padding: 2px 6px;
+  }
+}
+
+.token-ins {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  
+  .token-hyp.inserted {
+    color: var(--ion-color-tertiary-shade);
+    font-weight: 600;
+  }
+  
+  .op-badge {
+    font-size: 10px;
+    padding: 2px 6px;
+  }
+}
+
+// Text Comparison Section
+.text-comparison {
+  background: var(--ion-color-light);
+  border-top: 2px solid var(--ion-color-medium-tint);
+  padding: 16px;
+  margin-top: 8px;
+}
+
+.text-section {
+  margin-bottom: 16px;
+  
+  &:last-child {
+    margin-bottom: 0;
+  }
+  
+  .section-title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+    
+    ion-icon {
+      font-size: 14px;
+    }
+  }
+  
+  p {
+    margin: 0;
+    padding: 12px;
+    background: white;
+    border-radius: 6px;
+    border-left: 4px solid var(--ion-color-primary);
+    line-height: 1.6;
+    font-size: 14px;
+    direction: rtl; // For Arabic text
+    text-align: right;
+  }
+}
+
+.reference-text {
+  border-left-color: var(--ion-color-primary) !important;
+}
+
+.hypothesis-text {
+  border-left-color: var(--ion-color-secondary) !important;
+}
+
+// Empty State
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  text-align: center;
+  
+  ion-icon {
+    font-size: 64px;
+    margin-bottom: 16px;
+    opacity: 0.5;
+  }
+  
+  p {
+    color: var(--ion-color-medium);
+    margin: 0;
+    font-size: 14px;
+  }
+}
+
+// Responsive Design
+@media (max-width: 768px) {
+  .token-grid {
+    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+    gap: 6px;
+  }
+  
+  .metric-badge {
+    font-size: 20px;
+    padding: 6px 12px;
+  }
+  
+  ion-card {
+    margin: 8px;
+  }
+}
+
+@media (max-width: 480px) {
+  .token-grid {
+    grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+  }
+  
+  .stat-item {
+    ion-icon {
+      font-size: 16px;
+    }
+    
+    .stat-value {
+      font-size: 14px;
+    }
+    
+    .stat-label {
+      font-size: 9px;
+    }
+  }
+}
+
