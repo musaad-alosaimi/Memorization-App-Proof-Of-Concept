@@ -30,8 +30,6 @@ export class MemorizationDetailPage implements OnInit, OnDestroy {
   wordMatches: WordMatch[] = [];
   revealedWords: RevealedWord[] = [];
   showAlignmentViewer = false;
-  showDebugInfo = false;
-  matchThreshold = 0.8; // Configurable threshold for word matching
   private subscriptions: Subscription[] = [];
   private aligner: TextAligner;
 
@@ -47,20 +45,44 @@ export class MemorizationDetailPage implements OnInit, OnDestroy {
     });
   }
 
-  // Custom tokenizer that strictly splits words without combining them
-  tokenizeArabicText(text: string): string[] {
-    // Remove punctuation and normalize spaces, then split strictly by whitespace
-    const cleanedText = text
+  // Custom tokenizer that removes punctuation and empty tokens
+  private tokenizeArabicText(text: string): string[] {
+    // First, normalize spaces and split into potential phrases
+    const phrases = text
       .trim()
-      .replace(/[،,؛;:.!؟?«»""\[\](){}]/g, ' ')  // Replace punctuation with spaces
-      .replace(/\s+/g, ' ')  // Normalize multiple spaces to single space
-      .trim();
+      .split(/[،,؛;:.!؟?«»""\[\](){}]/g)  // Split on punctuation
+      .map(phrase => phrase.trim())
+      .filter(phrase => phrase.length > 0);
 
-    // Split strictly by whitespace - no word combining
-    const words = cleanedText.split(/\s+/);
+    const processedWords: string[] = [];
     
-    // Filter out empty strings and return individual words
-    return words.filter((word: string) => word.length > 0);
+    for (const phrase of phrases) {
+      // Split each phrase into words
+      const words = phrase.split(/\s+/);
+      
+      // Process each word or word group
+      for (let i = 0; i < words.length; i++) {
+        const word = words[i];
+        if (word.length === 0) continue;
+
+        // Check for compound words with prefixes
+        if (word.match(/^(ف|و|ب|ل|ك|س)[ا-ي]+$/)) {
+          // Look ahead for potential compound
+          if (i < words.length - 1) {
+            // Try to combine with next word
+            const compound = word + ' ' + words[i + 1];
+            processedWords.push(compound);
+            i++; // Skip next word since we used it in compound
+            continue;
+          }
+        }
+
+        // Add the word by itself
+        processedWords.push(word);
+      }
+    }
+
+    return processedWords.filter((word: string) => word.length > 0);
   }
 
   // Arabic text normalizer for the alignment library
@@ -124,114 +146,90 @@ export class MemorizationDetailPage implements OnInit, OnDestroy {
 
     // Add debug logging
     console.log('Current transcript:', transcript);
-    console.log('Tokenized transcript:', this.tokenizeArabicText(transcript));
+
+    // Tokenize the transcript
+    const transcriptTokens = this.tokenizeArabicText(transcript);
+    console.log('Transcript tokens:', transcriptTokens);
     console.log('Reference words:', this.revealedWords.map(w => w.word));
 
-    // Don't reset already revealed words - keep progress
-    const currentlyRevealedCount = this.revealedWords.filter(w => w.isRevealed).length;
+    // Track which transcript tokens have been matched
+    const usedTranscriptIndices = new Set<number>();
     
-    // If all words are already revealed, nothing to do
-    if (currentlyRevealedCount >= this.revealedWords.length) return;
-
-    // Normalize and tokenize the transcript
-    const normalizedTranscript = this.normalizeArabicText(transcript);
-    const transcriptTokens = this.tokenizeArabicText(normalizedTranscript);
-
-    console.log('Normalized transcript:', normalizedTranscript);
-    console.log('Transcript tokens:', transcriptTokens);
-
-    // Check for sequential word matches starting from the next unrevealed word
-    let wordsRevealed = 0;
-    let transcriptIndex = 0;
-
-    // Look for consecutive matches starting from the next word to reveal
-    for (let i = currentlyRevealedCount; i < this.revealedWords.length && transcriptIndex < transcriptTokens.length; i++) {
-      const targetWord = this.revealedWords[i].word;
-      const normalizedTargetWord = this.normalizeArabicText(targetWord);
+    // Match words sequentially - only reveal words in order
+    for (let refIndex = 0; refIndex < this.revealedWords.length; refIndex++) {
+      const refWord = this.revealedWords[refIndex];
       
-      console.log(`Checking word ${i}: "${targetWord}" (normalized: "${normalizedTargetWord}")`);
+      // Skip if already revealed
+      if (refWord.isRevealed) {
+        continue;
+      }
 
-      // Look for this word in the remaining transcript tokens
-      let foundMatch = false;
-      let bestMatchIndex = -1;
-      let bestMatchScore = 0;
+      // Try to find a match in the transcript starting from unused tokens
+      let matchFound = false;
+      const normalizedRefWord = this.normalizeArabicText(refWord.word);
+      
+      for (let transIndex = 0; transIndex < transcriptTokens.length; transIndex++) {
+        // Skip already used tokens
+        if (usedTranscriptIndices.has(transIndex)) {
+          continue;
+        }
 
-      for (let j = transcriptIndex; j < transcriptTokens.length; j++) {
-        const transcriptToken = this.normalizeArabicText(transcriptTokens[j]);
-        const matchScore = this.calculateWordMatchScore(normalizedTargetWord, transcriptToken);
+        const transcriptToken = transcriptTokens[transIndex];
+        const normalizedToken = this.normalizeArabicText(transcriptToken);
+
+        // Check for match using various methods
+        let isMatch = false;
+
+        // Method 1: Exact match
+        if (normalizedToken === normalizedRefWord) {
+          isMatch = true;
+        }
         
-        console.log(`  Comparing with token ${j}: "${transcriptTokens[j]}" (normalized: "${transcriptToken}") - score: ${matchScore}`);
-        
-        if (matchScore > bestMatchScore) {
-          bestMatchScore = matchScore;
-          bestMatchIndex = j;
+        // Method 2: Match without spaces (for compound words)
+        if (!isMatch) {
+          const noSpaceToken = normalizedToken.replace(/\s+/g, '');
+          const noSpaceRefWord = normalizedRefWord.replace(/\s+/g, '');
+          if (noSpaceToken === noSpaceRefWord) {
+            isMatch = true;
+          }
+        }
+
+        // Method 3: Partial match for compound words (both ways)
+        if (!isMatch) {
+          const noSpaceToken = normalizedToken.replace(/\s+/g, '');
+          const noSpaceRefWord = normalizedRefWord.replace(/\s+/g, '');
+          
+          // Check if one contains the other and they have substantial overlap
+          const minLength = Math.min(noSpaceToken.length, noSpaceRefWord.length);
+          const maxLength = Math.max(noSpaceToken.length, noSpaceRefWord.length);
+          
+          // Require at least 80% overlap for partial matches
+          if (minLength >= 3 && (minLength / maxLength) >= 0.8) {
+            if (noSpaceToken.includes(noSpaceRefWord) || noSpaceRefWord.includes(noSpaceToken)) {
+              isMatch = true;
+            }
+          }
+        }
+
+        if (isMatch) {
+          console.log(`Matched "${refWord.word}" with transcript token "${transcriptToken}"`);
+          refWord.isRevealed = true;
+          refWord.isCorrect = true;
+          usedTranscriptIndices.add(transIndex);
+          matchFound = true;
+          break;
         }
       }
 
-      // Only accept matches with high confidence (configurable threshold)
-      if (bestMatchScore >= this.matchThreshold) {
-        console.log(`Found match for "${targetWord}" at token ${bestMatchIndex} with score ${bestMatchScore}`);
-        this.revealedWords[i].isRevealed = true;
-        this.revealedWords[i].isCorrect = true;
-        wordsRevealed++;
-        
-        // Move transcript index past this match to ensure sequential processing
-        transcriptIndex = bestMatchIndex + 1;
-      } else {
-        console.log(`No sufficient match for "${targetWord}" (best score: ${bestMatchScore})`);
-        // Stop at first non-match to maintain sequential order
+      // If we didn't find a match for this word, stop here
+      // This ensures we only reveal words in sequence
+      if (!matchFound) {
+        console.log(`No match found for "${refWord.word}" - stopping sequential reveal`);
         break;
       }
     }
 
-    console.log(`Revealed ${wordsRevealed} new words`);
-  }
-
-  private calculateWordMatchScore(targetWord: string, transcriptToken: string): number {
-    // Exact match
-    if (targetWord === transcriptToken) return 1.0;
-    
-    // Remove spaces for comparison (but no word combining)
-    const noSpaceTarget = targetWord.replace(/\s+/g, '');
-    const noSpaceToken = transcriptToken.replace(/\s+/g, '');
-    
-    if (noSpaceTarget === noSpaceToken) return 0.95;
-    
-    // Check character-level similarity only (no compound word handling)
-    const similarity = this.calculateCharacterSimilarity(noSpaceTarget, noSpaceToken);
-    return similarity >= 0.8 ? similarity : 0; // Higher threshold for word-by-word matching
-  }
-
-  private calculateCharacterSimilarity(str1: string, str2: string): number {
-    if (str1.length === 0 || str2.length === 0) return 0;
-    
-    const longer = str1.length > str2.length ? str1 : str2;
-    const shorter = str1.length > str2.length ? str2 : str1;
-    
-    if (longer.length === 0) return 1.0;
-    
-    const editDistance = this.levenshteinDistance(longer, shorter);
-    return (longer.length - editDistance) / longer.length;
-  }
-
-  private levenshteinDistance(str1: string, str2: string): number {
-    const matrix = Array(str2.length + 1).fill(null).map(() => Array(str1.length + 1).fill(null));
-    
-    for (let i = 0; i <= str1.length; i++) matrix[0][i] = i;
-    for (let j = 0; j <= str2.length; j++) matrix[j][0] = j;
-    
-    for (let j = 1; j <= str2.length; j++) {
-      for (let i = 1; i <= str1.length; i++) {
-        const indicator = str1[i - 1] === str2[j - 1] ? 0 : 1;
-        matrix[j][i] = Math.min(
-          matrix[j][i - 1] + 1,     // deletion
-          matrix[j - 1][i] + 1,     // insertion
-          matrix[j - 1][i - 1] + indicator // substitution
-        );
-      }
-    }
-    
-    return matrix[str2.length][str1.length];
+    console.log('Revealed words count:', this.revealedWords.filter(w => w.isRevealed).length);
   }
 
   ngOnDestroy() {
@@ -273,14 +271,6 @@ export class MemorizationDetailPage implements OnInit, OnDestroy {
 
   toggleAlignmentViewer() {
     this.showAlignmentViewer = !this.showAlignmentViewer;
-  }
-
-  toggleDebugInfo() {
-    this.showDebugInfo = !this.showDebugInfo;
-  }
-
-  adjustMatchThreshold(delta: number) {
-    this.matchThreshold = Math.max(0.5, Math.min(1.0, this.matchThreshold + delta));
   }
 
   getRevealedWordsCount(): number {

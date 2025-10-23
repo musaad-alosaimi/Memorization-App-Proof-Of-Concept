@@ -101,30 +101,13 @@ export class SpeechRecognitionService {
     return normalized;
   }
 
-  // Strict word-by-word tokenizer (same as page component)
-  private tokenizeArabicText(text: string): string[] {
-    // Remove punctuation and normalize spaces, then split strictly by whitespace
-    const cleanedText = text
-      .trim()
-      .replace(/[،,؛;:.!؟?«»""\[\](){}]/g, ' ')  // Replace punctuation with spaces
-      .replace(/\s+/g, ' ')  // Normalize multiple spaces to single space
-      .trim();
-
-    // Split strictly by whitespace - no word combining
-    const words = cleanedText.split(/\s+/);
-    
-    // Filter out empty strings and return individual words
-    return words.filter((word: string) => word.length > 0);
-  }
-
   private checkWords(transcript: string, isFinal: boolean) {
     const normalizedTranscript = this.normalizeArabicText(transcript);
     const normalizedTarget = this.normalizeArabicText(this.targetText);
     
-    // Use strict word-by-word tokenization (same as the page component)
-    const transcriptWords = this.tokenizeArabicText(normalizedTranscript);
-    const targetWords = this.tokenizeArabicText(normalizedTarget);
-    const originalWords = this.tokenizeArabicText(transcript);
+    const transcriptWords = normalizedTranscript.trim().split(/\s+/);
+    const targetWords = normalizedTarget.trim().split(/\s+/);
+    const originalWords = transcript.trim().split(/\s+/);
     
     let newLastCorrectIndex = this.lastCorrectIndex;
     const matches: WordMatch[] = [];
@@ -138,14 +121,10 @@ export class SpeechRecognitionService {
       });
     }
 
-    // Check new words with improved matching logic
+    // Check new words
     for (let i = this.lastCorrectIndex + 1; i < transcriptWords.length; i++) {
-      const transcriptWord = transcriptWords[i];
-      const targetWord = i < targetWords.length ? targetWords[i] : null;
-      
-      // Calculate match score for better accuracy
-      const matchScore = targetWord ? this.calculateWordMatchScore(targetWord, transcriptWord) : 0;
-      const isCorrect = matchScore >= 0.8; // High confidence threshold
+      const isCorrect = i < targetWords.length && 
+                       this.normalizeArabicText(transcriptWords[i]) === targetWords[i];
       const isPartial = !isFinal && i === transcriptWords.length - 1;
       
       matches.push({
@@ -154,7 +133,7 @@ export class SpeechRecognitionService {
         isPartial
       });
 
-      // Update last correct index if this word is correct and final
+      // Update last correct index if this word is correct
       if (isCorrect && isFinal) {
         newLastCorrectIndex = i;
       }
@@ -170,53 +149,6 @@ export class SpeechRecognitionService {
     }
 
     this.wordMatchSubject.next(matches);
-  }
-
-  private calculateWordMatchScore(targetWord: string, transcriptWord: string): number {
-    // Exact match
-    if (targetWord === transcriptWord) return 1.0;
-    
-    // Remove spaces for comparison (but no word combining)
-    const noSpaceTarget = targetWord.replace(/\s+/g, '');
-    const noSpaceTranscript = transcriptWord.replace(/\s+/g, '');
-    
-    if (noSpaceTarget === noSpaceTranscript) return 0.95;
-    
-    // Check character-level similarity only (no compound word handling)
-    const similarity = this.calculateCharacterSimilarity(noSpaceTarget, noSpaceTranscript);
-    return similarity >= 0.8 ? similarity : 0; // Higher threshold for word-by-word matching
-  }
-
-  private calculateCharacterSimilarity(str1: string, str2: string): number {
-    if (str1.length === 0 || str2.length === 0) return 0;
-    
-    const longer = str1.length > str2.length ? str1 : str2;
-    const shorter = str1.length > str2.length ? str2 : str1;
-    
-    if (longer.length === 0) return 1.0;
-    
-    const editDistance = this.levenshteinDistance(longer, shorter);
-    return (longer.length - editDistance) / longer.length;
-  }
-
-  private levenshteinDistance(str1: string, str2: string): number {
-    const matrix = Array(str2.length + 1).fill(null).map(() => Array(str1.length + 1).fill(null));
-    
-    for (let i = 0; i <= str1.length; i++) matrix[0][i] = i;
-    for (let j = 0; j <= str2.length; j++) matrix[j][0] = j;
-    
-    for (let j = 1; j <= str2.length; j++) {
-      for (let i = 1; i <= str1.length; i++) {
-        const indicator = str1[i - 1] === str2[j - 1] ? 0 : 1;
-        matrix[j][i] = Math.min(
-          matrix[j][i - 1] + 1,     // deletion
-          matrix[j - 1][i] + 1,     // insertion
-          matrix[j - 1][i - 1] + indicator // substitution
-        );
-      }
-    }
-    
-    return matrix[str2.length][str1.length];
   }
 
   start() {
