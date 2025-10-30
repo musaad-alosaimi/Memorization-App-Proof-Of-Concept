@@ -150,86 +150,76 @@ export class MemorizationDetailPage implements OnInit, OnDestroy {
     // Tokenize the transcript
     const transcriptTokens = this.tokenizeArabicText(transcript);
     console.log('Transcript tokens:', transcriptTokens);
-    console.log('Reference words:', this.revealedWords.map(w => w.word));
-
-    // Track which transcript tokens have been matched
-    const usedTranscriptIndices = new Set<number>();
     
-    // Match words sequentially - only reveal words in order
-    for (let refIndex = 0; refIndex < this.revealedWords.length; refIndex++) {
-      const refWord = this.revealedWords[refIndex];
-      
-      // Skip if already revealed
-      if (refWord.isRevealed) {
-        continue;
+    // Find the current pointer position (first unrevealed word)
+    const currentPointer = this.revealedWords.findIndex(w => !w.isRevealed);
+    
+    // If all words are revealed, nothing to do
+    if (currentPointer === -1) {
+      console.log('All words already revealed');
+      return;
+    }
+
+    const nextWordToReveal = this.revealedWords[currentPointer];
+    console.log(`Pointer at position ${currentPointer}, next word to reveal: "${nextWordToReveal.word}"`);
+
+    // Only check if the NEXT word in sequence exists in the transcript
+    const normalizedRefWord = this.normalizeArabicText(nextWordToReveal.word);
+    let matchFound = false;
+
+    // Check each token in the transcript to see if it matches the next word
+    for (let transIndex = 0; transIndex < transcriptTokens.length; transIndex++) {
+      const transcriptToken = transcriptTokens[transIndex];
+      const normalizedToken = this.normalizeArabicText(transcriptToken);
+
+      // Check for match using various methods
+      let isMatch = false;
+
+      // Method 1: Exact match
+      if (normalizedToken === normalizedRefWord) {
+        isMatch = true;
       }
-
-      // Try to find a match in the transcript starting from unused tokens
-      let matchFound = false;
-      const normalizedRefWord = this.normalizeArabicText(refWord.word);
       
-      for (let transIndex = 0; transIndex < transcriptTokens.length; transIndex++) {
-        // Skip already used tokens
-        if (usedTranscriptIndices.has(transIndex)) {
-          continue;
-        }
-
-        const transcriptToken = transcriptTokens[transIndex];
-        const normalizedToken = this.normalizeArabicText(transcriptToken);
-
-        // Check for match using various methods
-        let isMatch = false;
-
-        // Method 1: Exact match
-        if (normalizedToken === normalizedRefWord) {
+      // Method 2: Match without spaces (for compound words)
+      if (!isMatch) {
+        const noSpaceToken = normalizedToken.replace(/\s+/g, '');
+        const noSpaceRefWord = normalizedRefWord.replace(/\s+/g, '');
+        if (noSpaceToken === noSpaceRefWord) {
           isMatch = true;
         }
+      }
+
+      // Method 3: Partial match for compound words (both ways)
+      if (!isMatch) {
+        const noSpaceToken = normalizedToken.replace(/\s+/g, '');
+        const noSpaceRefWord = normalizedRefWord.replace(/\s+/g, '');
         
-        // Method 2: Match without spaces (for compound words)
-        if (!isMatch) {
-          const noSpaceToken = normalizedToken.replace(/\s+/g, '');
-          const noSpaceRefWord = normalizedRefWord.replace(/\s+/g, '');
-          if (noSpaceToken === noSpaceRefWord) {
+        // Check if one contains the other and they have substantial overlap
+        const minLength = Math.min(noSpaceToken.length, noSpaceRefWord.length);
+        const maxLength = Math.max(noSpaceToken.length, noSpaceRefWord.length);
+        
+        // Require at least 80% overlap for partial matches
+        if (minLength >= 3 && (minLength / maxLength) >= 0.8) {
+          if (noSpaceToken.includes(noSpaceRefWord) || noSpaceRefWord.includes(noSpaceToken)) {
             isMatch = true;
           }
         }
-
-        // Method 3: Partial match for compound words (both ways)
-        if (!isMatch) {
-          const noSpaceToken = normalizedToken.replace(/\s+/g, '');
-          const noSpaceRefWord = normalizedRefWord.replace(/\s+/g, '');
-          
-          // Check if one contains the other and they have substantial overlap
-          const minLength = Math.min(noSpaceToken.length, noSpaceRefWord.length);
-          const maxLength = Math.max(noSpaceToken.length, noSpaceRefWord.length);
-          
-          // Require at least 80% overlap for partial matches
-          if (minLength >= 3 && (minLength / maxLength) >= 0.8) {
-            if (noSpaceToken.includes(noSpaceRefWord) || noSpaceRefWord.includes(noSpaceToken)) {
-              isMatch = true;
-            }
-          }
-        }
-
-        if (isMatch) {
-          console.log(`Matched "${refWord.word}" with transcript token "${transcriptToken}"`);
-          refWord.isRevealed = true;
-          refWord.isCorrect = true;
-          usedTranscriptIndices.add(transIndex);
-          matchFound = true;
-          break;
-        }
       }
 
-      // If we didn't find a match for this word, stop here
-      // This ensures we only reveal words in sequence
-      if (!matchFound) {
-        console.log(`No match found for "${refWord.word}" - stopping sequential reveal`);
+      if (isMatch) {
+        console.log(`✓ Matched "${nextWordToReveal.word}" with transcript token "${transcriptToken}"`);
+        nextWordToReveal.isRevealed = true;
+        nextWordToReveal.isCorrect = true;
+        matchFound = true;
         break;
       }
     }
 
-    console.log('Revealed words count:', this.revealedWords.filter(w => w.isRevealed).length);
+    if (!matchFound) {
+      console.log(`✗ No match found for "${nextWordToReveal.word}"`);
+    }
+
+    console.log(`Revealed words: ${this.revealedWords.filter(w => w.isRevealed).length} / ${this.revealedWords.length}`);
   }
 
   ngOnDestroy() {
