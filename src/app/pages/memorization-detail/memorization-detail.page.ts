@@ -7,7 +7,8 @@ import { SpeechRecognitionService, WordMatch } from '../../services/speech-recog
 import { MemorizationItem } from '../../models/memorization-item.model';
 import { Subscription } from 'rxjs';
 import { TextAlignmentViewerComponent } from '../../components/text-alignment-viewer/text-alignment-viewer.component';
-import { TextAligner, AlignmentOperation } from '../../../lib/text-alignment';
+import { matchRecitation, MatchResult } from '../../../recitation/matcher';
+import { tokenizeOriginal, normalizeArabic } from '../../../recitation/normalize';
 
 interface RevealedWord {
   word: string;
@@ -30,65 +31,21 @@ export class MemorizationDetailPage implements OnInit, OnDestroy {
   wordMatches: WordMatch[] = [];
   revealedWords: RevealedWord[] = [];
   showAlignmentViewer = false;
+  canSkipWord = false; // Show skip button when user is stuck
+  failedAttempts = 0; // Count consecutive failed attempts (public for template)
   private subscriptions: Subscription[] = [];
-  private aligner: TextAligner;
+  matchResult: MatchResult | null = null; // Made public for template access
+  readonly SIMILARITY_THRESHOLD = 0.30; // 30% similarity threshold (lowered for better matching) - public for template
+  private lastTranscriptLength = 0; // Track transcript changes
+  private readonly MAX_ATTEMPTS_BEFORE_SKIP = 3; // Allow skip after 3 attempts
+  private lastTranscriptUpdateTime = 0; // Track when transcript was last updated
+  private readonly TRANSCRIPT_FRESHNESS_MS = 3000; // Consider transcript "stale" after 3 seconds
 
   constructor(
     private route: ActivatedRoute,
     private memorizationService: MemorizationService,
     private speechService: SpeechRecognitionService
-  ) {
-    // Initialize aligner with Arabic normalizer and custom tokenizer
-    this.aligner = new TextAligner({
-      tokenizer: (text: string) => this.tokenizeArabicText(text),
-      normalizer: (text: string) => this.normalizeArabicText(text)
-    });
-  }
-
-  // Custom tokenizer that removes punctuation and empty tokens
-  private tokenizeArabicText(text: string): string[] {
-    // First, normalize spaces and split into potential phrases
-    const phrases = text
-      .trim()
-      .split(/[،,؛;:.!؟?«»""\[\](){}]/g)  // Split on punctuation
-      .map(phrase => phrase.trim())
-      .filter(phrase => phrase.length > 0);
-
-    const processedWords: string[] = [];
-    
-    for (const phrase of phrases) {
-      // Split each phrase into words
-      const words = phrase.split(/\s+/);
-      
-      // Process each word or word group
-      for (let i = 0; i < words.length; i++) {
-        const word = words[i];
-        if (word.length === 0) continue;
-
-        // Check for compound words with prefixes
-        if (word.match(/^(ف|و|ب|ل|ك|س)[ا-ي]+$/)) {
-          // Look ahead for potential compound
-          if (i < words.length - 1) {
-            // Try to combine with next word
-            const compound = word + ' ' + words[i + 1];
-            processedWords.push(compound);
-            i++; // Skip next word since we used it in compound
-            continue;
-          }
-        }
-
-        // Add the word by itself
-        processedWords.push(word);
-      }
-    }
-
-    return processedWords.filter((word: string) => word.length > 0);
-  }
-
-  // Arabic text normalizer for the alignment library
-  normalizeArabicForAlignment = (text: string): string => {
-    return this.normalizeArabicText(text);
-  };
+  ) {}
 
   ngOnInit() {
     const id = this.route.snapshot.paramMap.get('id');
@@ -106,6 +63,7 @@ export class MemorizationDetailPage implements OnInit, OnDestroy {
       ),
       this.speechService.transcriptSubject.subscribe(transcript => {
         this.currentTranscript = transcript;
+        this.lastTranscriptUpdateTime = Date.now(); // Track when transcript was updated
         if (this.item) {
           this.updateRevealedWords(transcript);
           this.accuracy = this.calculateAccuracy(transcript, this.item.content);
@@ -131,8 +89,15 @@ export class MemorizationDetailPage implements OnInit, OnDestroy {
   private initializeRevealedWords() {
     if (!this.item) return;
     
-    // Use the same tokenizer as the aligner to keep indices consistent
-    const words = this.tokenizeArabicText(this.item.content);
+    // Reset match result and skip tracking
+    this.matchResult = null;
+    this.failedAttempts = 0;
+    this.lastTranscriptLength = 0;
+    this.lastTranscriptUpdateTime = 0;
+    this.canSkipWord = false;
+    
+    // Tokenize original text using the new tokenizer
+    const words = tokenizeOriginal(this.item.content);
     this.revealedWords = words.map((word, index) => ({
       word,
       isRevealed: false,
@@ -141,91 +106,99 @@ export class MemorizationDetailPage implements OnInit, OnDestroy {
     }));
   }
 
+  /**
+   * Update revealed words based on transcript using the new matching algorithm
+   */
   private updateRevealedWords(transcript: string) {
     if (!this.item || !transcript) return;
 
-    // Add debug logging
     console.log('Current transcript:', transcript);
 
-    // Tokenize the transcript
-    const transcriptTokens = this.tokenizeArabicText(transcript);
+    // Tokenize transcript (split by whitespace for ASR tokens)
+    const transcriptTokens = transcript.trim().split(/\s+/).filter(t => t.length > 0);
     console.log('Transcript tokens:', transcriptTokens);
+
+    // Track the number of revealed words before matching
+    const previousRevealedCount = this.revealedWords.filter(w => w.isRevealed).length;
+
+    // Use the new matching algorithm
+    this.matchResult = matchRecitation(
+      this.item.content,
+      transcriptTokens,
+      this.SIMILARITY_THRESHOLD,
+      true // Use Arabic normalization
+    );
+
+    // Update revealedWords based on match result
+    const originalTokens = tokenizeOriginal(this.item.content);
     
-    // Find the current pointer position (first unrevealed word)
-    const currentPointer = this.revealedWords.findIndex(w => !w.isRevealed);
-    
-    // If all words are revealed, nothing to do
-    if (currentPointer === -1) {
-      console.log('All words already revealed');
-      return;
+    // Ensure revealedWords array matches originalTokens length
+    if (this.revealedWords.length !== originalTokens.length) {
+      this.revealedWords = originalTokens.map((word, index) => ({
+        word,
+        isRevealed: false,
+        isCorrect: false,
+        index
+      }));
     }
 
-    const nextWordToReveal = this.revealedWords[currentPointer];
-    console.log(`Pointer at position ${currentPointer}, next word to reveal: "${nextWordToReveal.word}"`);
+    // Update revealed status based on matchResult
+    for (let i = 0; i < originalTokens.length; i++) {
+      if (this.matchResult.revealedTokenMask[i]) {
+        this.revealedWords[i].isRevealed = true;
+        this.revealedWords[i].isCorrect = true;
+      }
+    }
 
-    // Only check if the NEXT word in sequence exists in the transcript
-    const normalizedRefWord = this.normalizeArabicText(nextWordToReveal.word);
-    let matchFound = false;
+    // Log detailed matching information for debugging
+    console.log('=== DETAILED MATCH INFO ===');
+    const nextWord = this.getNextExpectedWord();
+    console.log('Next expected word:', nextWord || '(All words revealed!)');
+    console.log('Unmatched transcript indices:', this.matchResult.unmatchedTranscriptIndices);
+    if (this.matchResult.unmatchedTranscriptIndices.length > 0) {
+      console.log('Unmatched words you said:', 
+        this.matchResult.unmatchedTranscriptIndices.map(idx => transcriptTokens[idx])
+      );
+    }
 
-    // Check each token in the transcript to see if it matches the next word
-    for (let transIndex = 0; transIndex < transcriptTokens.length; transIndex++) {
-      const transcriptToken = transcriptTokens[transIndex];
-      const normalizedToken = this.normalizeArabicText(transcriptToken);
-
-      // Check for match using various methods
-      let isMatch = false;
-
-      // Method 1: Exact match
-      if (normalizedToken === normalizedRefWord) {
-        isMatch = true;
+    // Track failed attempts for skip functionality
+    const currentRevealedCount = this.revealedWords.filter(w => w.isRevealed).length;
+    const transcriptChanged = transcriptTokens.length > this.lastTranscriptLength;
+    
+    if (transcriptChanged) {
+      if (currentRevealedCount === previousRevealedCount && currentRevealedCount < this.revealedWords.length) {
+        // Transcript changed but no new words revealed - increment failed attempts
+        this.failedAttempts++;
+        console.log(`Failed attempt ${this.failedAttempts}/${this.MAX_ATTEMPTS_BEFORE_SKIP}`);
+        
+        // Enable skip button after max attempts
+        if (this.failedAttempts >= this.MAX_ATTEMPTS_BEFORE_SKIP) {
+          this.canSkipWord = true;
+          console.log('Skip word button enabled');
+        }
+      } else if (currentRevealedCount > previousRevealedCount) {
+        // New words revealed - reset failed attempts
+        this.failedAttempts = 0;
+        this.canSkipWord = false;
+        console.log('Progress made, reset failed attempts');
       }
       
-      // Method 2: Match without spaces (for compound words)
-      if (!isMatch) {
-        const noSpaceToken = normalizedToken.replace(/\s+/g, '');
-        const noSpaceRefWord = normalizedRefWord.replace(/\s+/g, '');
-        if (noSpaceToken === noSpaceRefWord) {
-          isMatch = true;
-        }
-      }
-
-      // Method 3: Partial match for compound words (both ways)
-      if (!isMatch) {
-        const noSpaceToken = normalizedToken.replace(/\s+/g, '');
-        const noSpaceRefWord = normalizedRefWord.replace(/\s+/g, '');
-        
-        // Check if one contains the other and they have substantial overlap
-        const minLength = Math.min(noSpaceToken.length, noSpaceRefWord.length);
-        const maxLength = Math.max(noSpaceToken.length, noSpaceRefWord.length);
-        
-        // Require at least 80% overlap for partial matches
-        if (minLength >= 3 && (minLength / maxLength) >= 0.8) {
-          if (noSpaceToken.includes(noSpaceRefWord) || noSpaceRefWord.includes(noSpaceToken)) {
-            isMatch = true;
-          }
-        }
-      }
-
-      if (isMatch) {
-        console.log(`✓ Matched "${nextWordToReveal.word}" with transcript token "${transcriptToken}"`);
-        nextWordToReveal.isRevealed = true;
-        nextWordToReveal.isCorrect = true;
-        matchFound = true;
-        break;
-      }
+      this.lastTranscriptLength = transcriptTokens.length;
     }
 
-    if (!matchFound) {
-      console.log(`✗ No match found for "${nextWordToReveal.word}"`);
-    }
-
-    console.log(`Revealed words: ${this.revealedWords.filter(w => w.isRevealed).length} / ${this.revealedWords.length}`);
+    console.log(
+      `\n=== Summary: Revealed ${this.matchResult.matches.length} matches, ` +
+      `${this.revealedWords.filter(w => w.isRevealed).length} / ${this.revealedWords.length} words ===`
+    );
+    console.log('Unmatched transcript indices:', this.matchResult.unmatchedTranscriptIndices);
   }
 
   ngOnDestroy() {
     this.subscriptions.forEach(sub => sub.unsubscribe());
     this.stopListening();
   }
+
+  
 
   toggleListening() {
     if (this.isListening) {
@@ -255,8 +228,41 @@ export class MemorizationDetailPage implements OnInit, OnDestroy {
     this.accuracy = 0;
     this.wordMatches = [];
     this.showAlignmentViewer = false;
+    this.matchResult = null;
+    this.failedAttempts = 0;
+    this.lastTranscriptLength = 0;
+    this.lastTranscriptUpdateTime = 0;
+    this.canSkipWord = false;
     this.initializeRevealedWords();
     this.speechService.reset();
+  }
+
+  /**
+   * Skip the current unrevealed word and reveal the next one
+   * This helps users when they're stuck on a difficult word
+   */
+  skipCurrentWord() {
+    if (!this.canSkipWord) return;
+
+    // Find the first unrevealed word
+    const nextUnrevealedIndex = this.revealedWords.findIndex(w => !w.isRevealed);
+    
+    if (nextUnrevealedIndex !== -1) {
+      // Reveal the word but mark it as incorrect (skipped)
+      this.revealedWords[nextUnrevealedIndex].isRevealed = true;
+      this.revealedWords[nextUnrevealedIndex].isCorrect = false; // Mark as skipped/incorrect
+      
+      console.log(`Skipped word: "${this.revealedWords[nextUnrevealedIndex].word}"`);
+      
+      // Reset skip tracking
+      this.failedAttempts = 0;
+      this.canSkipWord = false;
+      
+      // Recalculate accuracy
+      if (this.item) {
+        this.accuracy = this.calculateAccuracy(this.currentTranscript, this.item.content);
+      }
+    }
   }
 
   toggleAlignmentViewer() {
@@ -271,25 +277,73 @@ export class MemorizationDetailPage implements OnInit, OnDestroy {
     return this.revealedWords.length;
   }
 
-  private removeDiacritics(text: string): string {
-    return text.replace(/[\u064B-\u065F\u0670]/g, '');
+  /**
+   * Get the list of unmatched words from the current transcript
+   */
+  getUnmatchedWords(): string[] {
+    // Clear unmatched words if not currently listening or no transcript
+    if (!this.isListening || !this.currentTranscript || this.currentTranscript.trim().length === 0) {
+      return [];
+    }
+    
+    // Check if transcript is "fresh" (updated recently)
+    const timeSinceLastUpdate = Date.now() - this.lastTranscriptUpdateTime;
+    if (timeSinceLastUpdate > this.TRANSCRIPT_FRESHNESS_MS) {
+      return []; // Transcript is stale, hide unmatched words
+    }
+    
+    if (!this.matchResult) {
+      return [];
+    }
+    
+    const transcriptTokens = this.currentTranscript.trim().split(/\s+/).filter(t => t.length > 0);
+    return this.matchResult.unmatchedTranscriptIndices.map(idx => transcriptTokens[idx]);
   }
 
-  private normalizeArabicText(text: string): string {
-    let normalized = this.removeDiacritics(text);
-    normalized = normalized
-      .replace(/[آأإٱ]/g, 'ا')      // Normalize alef variants
-      .replace(/ة/g, 'ه')          // Normalize ta marbuta
-      .replace(/ى/g, 'ي')          // Normalize alef maksura
-      .replace(/ؤ/g, 'و')          // Normalize hamza on waw
-      .replace(/ئ/g, 'ي')          // Normalize hamza on ya
-      // Add more normalization for prefixes
-      .replace(/^(ف|و|ب|ل|ك|س)(.+)$/, '$1$2')  // Keep prefixes attached
-      .replace(/[^\u0621-\u063A\u0641-\u064A\s]/g, '')  // Remove non-Arabic
-      .trim()
-      .toLowerCase();  // Make case-insensitive
-    return normalized;
+  /**
+   * Get details about the last unmatched word (for debugging)
+   */
+  getLastUnmatchedWordInfo(): string {
+    const unmatched = this.getUnmatchedWords();
+    if (unmatched.length === 0) return '';
+    
+    const lastWord = unmatched[unmatched.length - 1];
+    const nextExpected = this.getNextExpectedWord();
+    
+    if (!lastWord || !nextExpected) return '';
+    
+    // Calculate similarity between last unmatched word and next expected word
+    const normalizedSaid = this.normalizeArabicForAlignment(lastWord);
+    const normalizedExpected = this.normalizeArabicForAlignment(nextExpected);
+    
+    return `"${lastWord}" vs "${nextExpected}" (normalized: "${normalizedSaid}" vs "${normalizedExpected}")`;
   }
+
+  /**
+   * Get the next expected word (first unrevealed word)
+   */
+  getNextExpectedWord(): string | null {
+    const nextUnrevealedIndex = this.revealedWords.findIndex(w => !w.isRevealed);
+    if (nextUnrevealedIndex === -1) {
+      return null; // All words revealed
+    }
+    return this.revealedWords[nextUnrevealedIndex].word;
+  }
+
+  /**
+   * Check if there are any unrevealed words remaining
+   */
+  hasUnrevealedWords(): boolean {
+    return this.revealedWords.some(w => !w.isRevealed);
+  }
+
+  /**
+   * Normalization function for the text alignment viewer component
+   * Uses the new Arabic normalization utility
+   */
+  normalizeArabicForAlignment = (text: string): string => {
+    return normalizeArabic(text);
+  };
 
   private calculateAccuracy(transcript: string, original: string): number {
     // Only calculate accuracy based on revealed words
